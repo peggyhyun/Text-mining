@@ -176,7 +176,7 @@ def find_p_i_new(p_i, new_article):
 
 for i in range(0, len(dtm_new)):
     find_opt_result = []
-    find_opt_x = np.linspace(0.1,0.99,10**2)
+    find_opt_x = np.linspace(10**(-2),0.99,10**4)
     for p_try in find_opt_x:
         find_opt = find_p_i_new(p_try, i)
         find_opt_result.append(find_opt)
