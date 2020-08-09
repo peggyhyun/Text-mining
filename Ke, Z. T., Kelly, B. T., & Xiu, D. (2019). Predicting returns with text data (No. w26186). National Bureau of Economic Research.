@@ -1,0 +1,186 @@
+# -*- coding:utf-8 -*-
+'''
+---Peggy.H---
+Replication of
+"Ke, Z. T., Kelly, B. T., & Xiu, D. (2019). Predicting returns with text data (No. w26186). National Bureau of Economic Research."
+*** The algorithm applied a supervised model to score the sentiment of articles.
+Training dataset: 1) document-term matrix: dtm
+                  2) equity price dummy: sny_1 ***label
+Testing dataset: dtm_new
+Output: sentiment score of dtm_new
+Hyperparameter: alpha_pos, alpha_neg, kappa, lambda_
+
+'''
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+# 5 articles, 7 words
+dtm = np.array([[0,1,0,2,3,4,1],
+                [2,2,0,0,0,2,3],
+                [1,1,3,8,0,0,2],
+                [5,2,0,0,2,0,0],
+                [1,3,0,1,5,2,9]
+])
+
+print('dtm \n', dtm)
+
+#article dummy
+#if sny_1 = 1, the article is corresponding with a positive return
+sny_1 = [1,1,0,0,1]
+
+assert len(sny_1) == dtm.shape[0]
+
+
+pos_article_index = []
+pos_article = []
+s_word_all = []
+for i in range(0,len(sny_1)):
+    if sny_1[i] == 1:
+        pos_article_index.append(i)
+        pos_article.append(dtm[i,:])
+        s_word = np.where(dtm[i,:] != 0)[0].tolist()
+        s_word_all.append(s_word)
+
+
+s_word_all = [j for i in s_word_all for j in i]
+s_word_index = list(set(s_word_all))
+print('sentiemnt word', s_word_index)
+
+
+f_j_n = []
+f_j_d = []
+f_j = []
+
+for s_word in s_word_index:
+    # print('positive word',pos_word)
+    count = 0
+    for article in pos_article:
+        if article[s_word] != 0:
+            count += 1
+    print('number of positive articles including sentiment word', s_word, '=', count)
+    f_j_n.append(count)
+
+    all_count = 0
+    for article in dtm:
+        if article[s_word] != 0:
+            all_count += 1
+    print('number of articles including sentiment word', s_word, '=', all_count)
+    f_j_d.append(all_count)
+
+    f_j.append(count/all_count)
+
+print('Frequency with which sentiment word j co-occurs with a positive return', f_j)
+# print(f_j_d)
+
+
+#hyperparameters
+alpha_pos = 0.65
+alpha_neg = 0.6
+kappa = 2 #restrictions on infrequent words
+
+pos_word = []
+neg_word = []
+for i in range(0, len(f_j_d)):
+    if f_j_d[i] > kappa:
+        if f_j[i] > alpha_pos:
+            pos_word.append(s_word_index[i])
+        else:pass
+        if f_j[i] < alpha_neg:
+            neg_word.append(s_word_index[i])
+    else:pass
+
+
+print('positive word:', pos_word,
+      'negative word:', neg_word)
+
+
+
+y_i = np.asarray([100, 50, 99, 89, 48])
+y_i_rank = [sorted(y_i).index(x) for x in y_i]
+assert len(y_i) == dtm.shape[0]
+p_i_hat = y_i/len(y_i)
+print('p_i_hat', p_i_hat)
+
+
+s_hat = []
+for i in range(0, len(dtm)):
+    s_i_hat = 0
+    for s_word in s_word_index:
+        if dtm[i,s_word] !=0:
+            s_i_hat += dtm[i,s_word]
+        else:pass
+    s_hat.append(s_i_hat)
+    # print(i, s_i_hat)
+print('s_hat \n', s_hat)
+
+dtm_s_hat = dtm[:,s_word_index]
+print('dtm_s_hat \n', dtm_s_hat)
+
+d_i_hat = np.zeros([dtm_s_hat.shape[0], dtm_s_hat.shape[1]])
+for i in range(0, len(s_hat)):
+    d_i_hat[i,:] = dtm_s_hat[i,:]/s_hat[i]
+print('d_i_hat\n', d_i_hat)
+
+D_hat = np.transpose(d_i_hat)
+print('D_hat \n', D_hat)
+
+
+W_hat = np.zeros([2, len(p_i_hat)])
+W_hat[0,:] = p_i_hat
+W_hat[1,:] = 1- p_i_hat
+print('W_hat \n', W_hat)
+
+O_hat = np.dot(np.dot(D_hat, np.transpose(W_hat)), np.linalg.inv(np.dot(W_hat, np.transpose(W_hat))) )
+print('O_hat \n', O_hat)
+
+
+for i in range(0, len(O_hat)):
+    if len(np.where(O_hat[i, :] <= 0)[0]) > 0:
+        O_hat[i, np.where(O_hat[i, :] <= 0)[0]] = 0
+
+
+for col in range(0, O_hat.shape[1]):
+    O_hat[:,col] = O_hat[:,col]/np.std(O_hat[:,col])
+print('replace negative values and re-normalize O_hat \n', O_hat)
+
+
+
+#scoring new articles
+dtm_new = np.asarray([
+    [0, 1, 0, 0, 3, 4, 1],
+    [2, 2, 0, 1, 0, 2, 3],
+    [1, 1, 3, 8, 0, 0, 2],
+    [5, 3, 4, 1, 3, 0, 0],
+    [1, 3, 0, 1, 5, 2, 9]
+])
+print('dtm_new \n', dtm_new)
+
+dtm_new_s = dtm_new[:,s_word_index]
+print('dtm_new_s \n', dtm_new_s)
+
+s_new = np.sum(dtm_new_s, axis=1)
+print('s_new \n', s_new)
+
+
+
+lambda_ = 0.01
+def find_p_i_new(p_i, new_article):
+    for j in range(0, len(s_word_index)):
+        argmax = (1/s_new[new_article]) * np.sum(dtm_new[new_article] * np.log(p_i * O_hat[j,0] + (1-p_i) * O_hat[j,1])) \
+                 + lambda_ * np.log(p_i*(1-p_i))
+        # print(argmax)
+        return argmax
+
+
+
+for i in range(0, len(dtm_new)):
+    find_opt_result = []
+    find_opt_x = np.linspace(0.1,0.99,10**2)
+    for p_try in find_opt_x:
+        find_opt = find_p_i_new(p_try, i)
+        find_opt_result.append(find_opt)
+    # plt.plot(find_opt_result)
+    # plt.show()
+    p_i_new = find_opt_x[find_opt_result.index(max(find_opt_result))]
+    print('estimated sentiment score of article', i, '=', p_i_new)
